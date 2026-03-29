@@ -1,0 +1,16 @@
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
+FACES_DIR = DATA_DIR / "faces"
+ATTENDANCE_DIR = DATA_DIR / "attendance"
+ENCODINGS_FILE = DATA_DIR / "encodings.pkl"
+TRAINER_FILE = DATA_DIR / "trainer.yml"
+DATABASE_FILE = DATA_DIR / "attendance.db"
+EXPORT_DIR = DATA_DIR / "exports"
+CAMERA_INDEX = 0
+FACE_SIZE = (200, 200)
+LBPH_CONFIDENCE_THRESHOLD = 65.0
+LIVENESS_EYE_OPEN_FRAMES = 2
+LIVENESS_EYE_CLOSED_FRAMES = 2
