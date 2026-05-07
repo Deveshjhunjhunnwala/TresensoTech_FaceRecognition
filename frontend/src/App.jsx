@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { apiClient, ApiError } from "./lib/api";
 import LoginView from "./views/LoginView";
 import OverviewView from "./views/OverviewView";
@@ -6,44 +6,29 @@ import EnrollView from "./views/EnrollView";
 import RecognitionView from "./views/RecognitionView";
 import WorkersView from "./views/WorkersView";
 import AttendanceView from "./views/AttendanceView";
-import Sidebar from "./components/Sidebar";
-import Topbar from "./components/Topbar";
 
 const TOKEN_KEY = "attendance_operator_token";
 
-export const NAV_ITEMS = [
-  { key: "overview", label: "Overview" },
-  { key: "enroll", label: "Add New Face" },
-  { key: "recognize", label: "Detect Face" },
-  { key: "workers", label: "Worker List" },
-  { key: "attendance", label: "Attendance" },
-];
-
 const VIEW_TITLES = {
   overview: {
-    eyebrow: "Operations Centre",
-    title: "System Overview",
-    subtitle: "Monitor enrollment, live recognition, and workforce movement from one operator console.",
+    title: "Home",
+    subtitle: "Choose one action to continue.",
   },
   enroll: {
-    eyebrow: "Enrollment",
-    title: "Add New Face",
-    subtitle: "Capture high-quality face samples directly from the operator camera before indexing them.",
+    title: "New User",
+    subtitle: "Add employee name, ID, and picture.",
   },
   recognize: {
-    eyebrow: "Recognition",
-    title: "Live Detection Console",
-    subtitle: "Run continuous face recognition, inspect matches, and review decision traces in real time.",
+    title: "Scan",
+    subtitle: "Scan a face and mark attendance.",
   },
   workers: {
-    eyebrow: "Directory",
-    title: "Worker Register",
-    subtitle: "Audit enrolled identities, remove old records, and keep the employee directory clean.",
+    title: "Database",
+    subtitle: "View registered employees.",
   },
   attendance: {
-    eyebrow: "Attendance",
-    title: "Attendance Ledger",
-    subtitle: "Review the latest worker check-ins recorded by the live recognition pipeline.",
+    title: "Attendance History",
+    subtitle: "View marked attendance records.",
   },
 };
 
@@ -51,73 +36,122 @@ export default function App() {
   const [token, setToken] = useState(() => window.localStorage.getItem(TOKEN_KEY) || "");
   const [view, setView] = useState("overview");
   const [session, setSession] = useState(null);
+  const [authStatus, setAuthStatus] = useState({
+    configured: false,
+    setup_required: true,
+    source: "none",
+  });
   const [status, setStatus] = useState(null);
-  const [architecture, setArchitecture] = useState(null);
   const [workers, setWorkers] = useState([]);
   const [attendance, setAttendance] = useState([]);
-  const [loading, setLoading] = useState(Boolean(token));
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
-  const viewMeta = VIEW_TITLES[view] ?? VIEW_TITLES.overview;
+  useEffect(() => {
+    if (token) {
+      void loadDeviceData(token);
+      return;
+    }
+    setSession(null);
+    setStatus(null);
+    setWorkers([]);
+    setAttendance([]);
+    void loadAuthStatus();
+  }, [token]);
 
-  const loadDashboard = useCallback(async (activeToken = token, silent = false) => {
+  async function loadAuthStatus() {
+    setLoading(true);
+    try {
+      const authState = await apiClient.getAuthStatus();
+      setAuthStatus(authState);
+      setError("");
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "Could not load login state.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadDeviceData(activeToken = token, silent = false) {
     if (!activeToken) {
       return;
     }
+
     if (silent) {
       setRefreshing(true);
     } else {
       setLoading(true);
     }
-    setError("");
+
     try {
       const me = await apiClient.me(activeToken);
-      const [statusData, architectureData, workersData, attendanceData] = await Promise.all([
+      const [statusData, workersData, attendanceData] = await Promise.all([
         apiClient.get("/api/v2/status", activeToken),
-        apiClient.get("/api/v2/architecture", activeToken),
         apiClient.get("/api/v2/workers", activeToken),
         apiClient.get("/api/v2/attendance", activeToken),
       ]);
       setSession(me);
       setStatus(statusData);
-      setArchitecture(architectureData);
       setWorkers(workersData);
       setAttendance(attendanceData);
+      setAuthStatus({ configured: true, setup_required: false, source: "session" });
+      setError("");
     } catch (requestError) {
-      const message = requestError instanceof Error ? requestError.message : "Could not load the operator workspace.";
-      setError(message);
+      const message = requestError instanceof Error ? requestError.message : "Could not load the device data.";
       window.localStorage.removeItem(TOKEN_KEY);
       setToken("");
       setSession(null);
+      setStatus(null);
+      setWorkers([]);
+      setAttendance([]);
+      setError(message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token]);
+  }
 
-  useEffect(() => {
-    if (!token) {
-      setSession(null);
-      setLoading(false);
-      return;
-    }
-    loadDashboard(token);
-  }, [token, loadDashboard]);
-
-  const metrics = useMemo(() => ([
-    { label: "Workers", value: workers.length, tone: "teal" },
-    { label: "Indexed Faces", value: status?.indexed_embeddings ?? 0, tone: "cyan" },
-    { label: "Attendance Events", value: status?.attendance_events ?? 0, tone: "slate" },
-    { label: "Live Cache", value: status?.cache_entries ?? 0, tone: "amber" },
-  ]), [status, workers]);
+  function storeSession(loginResponse) {
+    window.localStorage.setItem(TOKEN_KEY, loginResponse.token);
+    setToken(loginResponse.token);
+    setView("overview");
+  }
 
   async function handleLogin(username, password) {
     setError("");
     try {
       const response = await apiClient.login(username, password);
-      window.localStorage.setItem(TOKEN_KEY, response.token);
-      setToken(response.token);
+      storeSession(response);
+    } catch (requestError) {
+      if (requestError instanceof ApiError) {
+        setError(requestError.message);
+        return;
+      }
+      throw requestError;
+    }
+  }
+
+  async function handleSetup(username, password, confirmPassword) {
+    setError("");
+    try {
+      const response = await apiClient.setupCredentials(username, password, confirmPassword);
+      storeSession(response);
+    } catch (requestError) {
+      if (requestError instanceof ApiError) {
+        setError(requestError.message);
+        return;
+      }
+      throw requestError;
+    }
+  }
+
+  async function handleReset(payload) {
+    setError("");
+    try {
+      const response = await apiClient.resetCredentials(payload);
+      storeSession(response);
     } catch (requestError) {
       if (requestError instanceof ApiError) {
         setError(requestError.message);
@@ -135,85 +169,92 @@ export default function App() {
     }
     window.localStorage.removeItem(TOKEN_KEY);
     setToken("");
-    setSession(null);
-    setStatus(null);
-    setArchitecture(null);
-    setWorkers([]);
-    setAttendance([]);
+    setView("overview");
   }
 
   async function handleRefresh() {
-    await loadDashboard(token, true);
+    if (session) {
+      await loadDeviceData(token, true);
+      return;
+    }
+    await loadAuthStatus();
   }
 
-  if (loading && !session) {
-    return (
-      <div className="loading-shell">
-        <div className="loading-orb" />
-        <div className="loading-copy">Loading operator workspace...</div>
-      </div>
-    );
-  }
-
-  if (!session) {
-    return <LoginView onLogin={handleLogin} error={error} />;
-  }
+  const viewMeta = VIEW_TITLES[view] ?? VIEW_TITLES.overview;
 
   return (
-    <div className="app-shell">
-      <Sidebar
-        items={NAV_ITEMS}
-        currentView={view}
-        onChangeView={setView}
-        username={session.username}
-        onLogout={handleLogout}
-      />
-      <main className="main-shell">
-        <Topbar
-          eyebrow={viewMeta.eyebrow}
-          title={viewMeta.title}
-          subtitle={viewMeta.subtitle}
-          onRefresh={handleRefresh}
-          refreshing={refreshing}
-        />
+    <div className="device-shell">
+      <main className="device-screen">
+        {loading ? (
+          <div className="loading-shell">
+            <div className="loading-orb" />
+            <div className="loading-copy">Loading device...</div>
+          </div>
+        ) : null}
 
-        {error ? <div className="alert error">{error}</div> : null}
-
-        {view === "overview" ? (
-          <OverviewView
-            metrics={metrics}
-            architecture={architecture}
-            status={status}
-            attendance={attendance}
-            onJump={setView}
+        {!loading && !session ? (
+          <LoginView
+            authStatus={authStatus}
+            onLogin={handleLogin}
+            onSetup={handleSetup}
+            onReset={handleReset}
+            error={error}
           />
         ) : null}
 
-        {view === "enroll" ? (
-          <EnrollView token={token} onUpdated={() => loadDashboard(token, true)} />
-        ) : null}
+        {!loading && session ? (
+          <>
+            <header className="device-header">
+              <div>
+                <div className="device-brand-line">Tresenso Face Attendance</div>
+                <h1>{viewMeta.title}</h1>
+                <p>{viewMeta.subtitle}</p>
+              </div>
 
-        {view === "recognize" ? (
-          <RecognitionView token={token} onUpdated={() => loadDashboard(token, true)} />
-        ) : null}
+              <div className="device-header-actions">
+                {view !== "overview" ? (
+                  <button className="button button-ghost" onClick={() => setView("overview")}>Home</button>
+                ) : null}
+                <button className="button button-ghost" onClick={handleRefresh}>
+                  {refreshing ? "Refreshing..." : "Refresh"}
+                </button>
+                <button className="button button-dark" onClick={handleLogout}>Logout</button>
+              </div>
+            </header>
 
-        {view === "workers" ? (
-          <WorkersView
-            token={token}
-            workers={workers}
-            architecture={architecture}
-            onUpdated={() => loadDashboard(token, true)}
-          />
-        ) : null}
+            {error ? <div className="alert error">{error}</div> : null}
 
-        {view === "attendance" ? (
-          <AttendanceView
-            token={token}
-            attendance={attendance}
-            onUpdated={() => loadDashboard(token, true)}
-          />
+            {view === "overview" ? (
+              <OverviewView
+                status={status}
+                onJump={setView}
+              />
+            ) : null}
+
+            {view === "enroll" ? (
+              <EnrollView token={token} onUpdated={() => loadDeviceData(token, true)} />
+            ) : null}
+
+            {view === "recognize" ? (
+              <RecognitionView token={token} onUpdated={() => loadDeviceData(token, true)} />
+            ) : null}
+
+            {view === "workers" ? (
+              <WorkersView
+                token={token}
+                workers={workers}
+                onUpdated={() => loadDeviceData(token, true)}
+              />
+            ) : null}
+
+            {view === "attendance" ? (
+              <AttendanceView attendance={attendance} />
+            ) : null}
+          </>
         ) : null}
       </main>
+
+      <footer className="device-footer">Made by Tresenso Tech Pvt Ltd</footer>
     </div>
   );
 }

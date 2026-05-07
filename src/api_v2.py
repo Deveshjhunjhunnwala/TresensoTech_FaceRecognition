@@ -1,16 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from secrets import token_urlsafe
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from src.auth import authenticate_admin, get_admin_credentials
+from src.auth import (
+    authenticate_admin,
+    ensure_admin_auth_config,
+    get_admin_username,
+    get_auth_status,
+    is_admin_auth_configured,
+    reset_admin_credentials,
+    setup_admin_credentials,
+)
+from src.session_store import SessionState, get_session_store
 from src.v2.schemas import (
     ArchitectureNote,
     AttendanceRow,
@@ -29,13 +36,6 @@ from src.v2.service import ScalableAttendanceService
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
 FRONTEND_INDEX = FRONTEND_DIST_DIR / "index.html"
-SESSION_TTL_HOURS = 12
-
-
-@dataclass
-class SessionState:
-    username: str
-    expires_at: datetime
 
 
 class LoginRequest(BaseModel):
@@ -49,9 +49,28 @@ class LoginResponse(BaseModel):
     expires_at: datetime
 
 
+class AuthStatusResponse(BaseModel):
+    configured: bool
+    setup_required: bool
+    source: str
+
+
 class MeResponse(BaseModel):
     username: str
     expires_at: datetime
+
+
+class SetupCredentialsRequest(BaseModel):
+    username: str
+    password: str
+    confirm_password: str
+
+
+class ResetCredentialsRequest(BaseModel):
+    current_username: str
+    new_username: str
+    new_password: str
+    confirm_password: str
 
 
 app = FastAPI(
@@ -60,18 +79,11 @@ app = FastAPI(
     description="FastAPI backend for the operator-facing React attendance application.",
 )
 service = ScalableAttendanceService()
-sessions: dict[str, SessionState] = {}
+session_store = get_session_store()
 
 
 if (FRONTEND_DIST_DIR / "assets").exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST_DIR / "assets"), name="assets")
-
-
-def _purge_expired_sessions() -> None:
-    now = datetime.utcnow()
-    expired = [token for token, state in sessions.items() if state.expires_at <= now]
-    for token in expired:
-        del sessions[token]
 
 
 def _extract_token(authorization: str | None, x_auth_token: str | None) -> str | None:
@@ -86,11 +98,19 @@ def require_auth(
     authorization: str | None = Header(default=None),
     x_auth_token: str | None = Header(default=None),
 ) -> SessionState:
-    _purge_expired_sessions()
     token = _extract_token(authorization, x_auth_token)
-    if not token or token not in sessions:
+    if not token:
         raise HTTPException(status_code=401, detail="Authentication required.")
-    return sessions[token]
+    session = session_store.get_session(token)
+    if session is None:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    return session
+
+
+@app.on_event("startup")
+def verify_session_backend() -> None:
+    ensure_admin_auth_config(allow_bootstrap=True)
+    session_store.ping()
 
 
 @app.get("/", response_class=HTMLResponse, response_model=None)
@@ -119,10 +139,48 @@ def health() -> dict[str, str]:
 def login(payload: LoginRequest) -> LoginResponse:
     if not authenticate_admin(payload.username, payload.password):
         raise HTTPException(status_code=401, detail="Invalid username or password.")
-    token = token_urlsafe(32)
-    expires_at = datetime.utcnow() + timedelta(hours=SESSION_TTL_HOURS)
-    sessions[token] = SessionState(username=payload.username, expires_at=expires_at)
-    return LoginResponse(token=token, username=payload.username, expires_at=expires_at)
+    session = session_store.create_session(payload.username)
+    return LoginResponse(token=session.session_id, username=session.username, expires_at=session.expires_at)
+
+
+@app.get("/api/v2/auth/status", response_model=AuthStatusResponse)
+def auth_status() -> AuthStatusResponse:
+    status = get_auth_status()
+    return AuthStatusResponse(
+        configured=status.configured,
+        setup_required=status.setup_required,
+        source=status.source,
+    )
+
+
+@app.post("/api/v2/auth/setup", response_model=LoginResponse)
+def setup_credentials(payload: SetupCredentialsRequest) -> LoginResponse:
+    if payload.password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
+    try:
+        setup_admin_credentials(username=payload.username, password=payload.password)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    session = session_store.create_session(payload.username.strip())
+    return LoginResponse(token=session.session_id, username=session.username, expires_at=session.expires_at)
+
+
+@app.post("/api/v2/auth/reset", response_model=LoginResponse)
+def reset_credentials(payload: ResetCredentialsRequest) -> LoginResponse:
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
+    try:
+        reset_admin_credentials(
+            current_username=payload.current_username,
+            new_username=payload.new_username,
+            new_password=payload.new_password,
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    session = session_store.create_session(payload.new_username.strip())
+    return LoginResponse(token=session.session_id, username=session.username, expires_at=session.expires_at)
 
 
 @app.get("/api/v2/auth/me", response_model=MeResponse)
@@ -136,15 +194,17 @@ def logout(
     x_auth_token: str | None = Header(default=None),
 ) -> dict[str, bool]:
     token = _extract_token(authorization, x_auth_token)
-    if token and token in sessions:
-        del sessions[token]
+    if token:
+        session_store.delete_session(token)
     return {"ok": True}
 
 
 @app.get("/api/v2/auth/default-admin")
 def default_admin_hint(session: SessionState = Depends(require_auth)) -> dict[str, str]:
-    username, _password = get_admin_credentials()
-    return {"username": username}
+    return {
+        "username": get_admin_username() or "",
+        "configured": "true" if is_admin_auth_configured() else "false",
+    }
 
 
 @app.get("/api/v2/status", response_model=ServiceStatus)

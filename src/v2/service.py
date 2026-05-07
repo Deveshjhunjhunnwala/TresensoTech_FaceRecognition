@@ -13,6 +13,7 @@ from src.v2.config import (
     AMBIGUITY_MARGIN,
     DEFAULT_LIST_LIMIT,
     FACE_SIZE,
+    FAST_ACCEPT_SCORE,
     LBPH_CONFIDENCE_THRESHOLD,
     MAX_FACE_BRIGHTNESS,
     MATCH_THRESHOLD,
@@ -78,6 +79,10 @@ class ScalableAttendanceService:
             del self.pending_matches[camera_id]
 
     def _confirm_match_candidate(self, camera_id: str, worker_id: int, score: float) -> tuple[bool, float]:
+        if score >= FAST_ACCEPT_SCORE:
+            self.pending_matches.pop(camera_id, None)
+            return True, score
+
         self._purge_pending_matches()
         now = datetime.utcnow()
         state = self.pending_matches.get(camera_id)
@@ -351,14 +356,14 @@ class ScalableAttendanceService:
                 continue
 
             best_worker_id, best_score, second_best_score = self._aggregate_descriptor_hits(hits)
-            if best_worker_id is None or best_score < max(MATCH_THRESHOLD, 0.58):
+            if best_worker_id is None or best_score < max(MATCH_THRESHOLD, 0.55):
                 unknown_faces += 1
                 if usable_debug_index < len(debug_faces):
                     debug_faces[usable_debug_index].reason = "Rejected: top similarity score is below threshold."
                     debug_faces[usable_debug_index].candidates = self._debug_candidates(hits)
                 continue
 
-            if (best_score - second_best_score) < max(AMBIGUITY_MARGIN, 0.05):
+            if (best_score - second_best_score) < max(AMBIGUITY_MARGIN, 0.03):
                 unknown_faces += 1
                 if usable_debug_index < len(debug_faces):
                     debug_faces[usable_debug_index].reason = "Rejected: top candidates are too close to each other."

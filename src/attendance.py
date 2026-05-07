@@ -23,6 +23,31 @@ def handle_gui(_: argparse.Namespace) -> None:
     launch_app()
 
 
+def launch_web_app(open_browser: bool = True) -> None:
+    import os
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    url = "http://127.0.0.1:8000/"
+    should_open_browser = open_browser and os.getenv("ATTENDANCE_OPEN_BROWSER_ON_START", "true").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if should_open_browser:
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+
+    print(f"Starting portrait device UI at {url}")
+    uvicorn.run("src.api_v2:app", host="127.0.0.1", port=8000, reload=False)
+
+
+def handle_web(_: argparse.Namespace) -> None:
+    launch_web_app()
+
+
 def handle_export(args: argparse.Namespace) -> None:
     if args.today:
         file_path = export_today()
@@ -56,5 +81,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     gui_parser = subparsers.add_parser("gui", help="Launch the desktop GUI")
     gui_parser.set_defaults(handler=handle_gui)
+
+    desktop_parser = subparsers.add_parser("desktop", help="Launch the legacy desktop GUI")
+    desktop_parser.set_defaults(handler=handle_gui)
+
+    web_parser = subparsers.add_parser("web", help="Launch the portrait web device UI")
+    web_parser.set_defaults(handler=handle_web)
 
     return parser

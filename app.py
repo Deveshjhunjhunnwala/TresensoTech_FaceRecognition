@@ -1,12 +1,11 @@
-from src.attendance import build_parser
-from src.gui import launch_app
+from src.attendance import build_parser, launch_web_app
 
 
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     if getattr(args, "command", None) is None:
-        launch_app()
+        launch_web_app()
         return
 
     args.handler(args)

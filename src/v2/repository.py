@@ -14,11 +14,14 @@ def utc_now_iso() -> str:
 
 @contextmanager
 def get_connection() -> Iterator[sqlite3.Connection]:
-    connection = sqlite3.connect(SCALABLE_DB_FILE)
+    connection = sqlite3.connect(SCALABLE_DB_FILE, timeout=30)
     connection.row_factory = sqlite3.Row
     try:
         yield connection
         connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
     finally:
         connection.close()
 
@@ -238,6 +241,9 @@ def mark_attendance(worker_id: int, camera_id: str, matched_score: float) -> boo
     created_at = now.isoformat(timespec="seconds")
 
     with get_connection() as connection:
+        # Serialize the "check recent event -> insert new event" flow so
+        # simultaneous scans for the same worker cannot both commit.
+        connection.execute("BEGIN IMMEDIATE")
         recent = connection.execute(
             """
             SELECT id FROM attendance_events

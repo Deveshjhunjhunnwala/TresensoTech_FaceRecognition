@@ -14,6 +14,9 @@ def get_connection() -> Iterator[sqlite3.Connection]:
     try:
         yield connection
         connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
     finally:
         connection.close()
 

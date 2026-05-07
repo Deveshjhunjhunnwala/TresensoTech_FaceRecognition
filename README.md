@@ -206,17 +206,42 @@ For stronger accuracy later, the cleanest route is:
 - Daily CSV logging plus Excel export
 - Basic liveness check based on face movement across frames
 
-## Default Admin Login
+## Admin Authentication Setup
 
-- Username: `admin`
-- Password: `admin123`
+Plaintext admin passwords are no longer supported.
 
-You can override these with environment variables:
+1. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+2. Generate a bcrypt password hash:
+
+```bash
+python scripts/generate_admin_password_hash.py
+```
+
+3. Set environment variables before starting the app:
+
+```bash
+ADMIN_USERNAME=your_user
+ADMIN_PASSWORD_HASH=your_bcrypt_hash
+```
+
+Supported fallback environment variable names for compatibility:
 
 ```bash
 ATTENDANCE_ADMIN_USERNAME=your_user
-ATTENDANCE_ADMIN_PASSWORD=your_password
+ATTENDANCE_ADMIN_PASSWORD_HASH=your_bcrypt_hash
 ```
+
+Notes:
+
+- The password is stored only as a bcrypt hash.
+- The backend compares usernames with `hmac.compare_digest`.
+- The app now fails fast on startup if admin auth is not configured.
+- Operator sessions default to 5 minutes. Override with `ATTENDANCE_SESSION_TTL_SECONDS` if needed.
 
 ## Setup
 

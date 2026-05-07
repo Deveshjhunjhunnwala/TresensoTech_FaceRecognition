@@ -18,3 +18,23 @@ export function formatServerDateTime(value) {
   }
   return parsed.toLocaleString();
 }
+
+export function formatServerDate(value) {
+  const parsed = parseServerDate(value);
+  if (!parsed) {
+    return "-";
+  }
+  return parsed.toLocaleDateString();
+}
+
+export function formatServerTime(value) {
+  const parsed = parseServerDate(value);
+  if (!parsed) {
+    return "-";
+  }
+  return parsed.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}

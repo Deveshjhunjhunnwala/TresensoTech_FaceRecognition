@@ -1,58 +1,56 @@
+import { useState } from "react";
 import Panel from "../components/Panel";
 import DataTable from "../components/DataTable";
 import { apiClient } from "../lib/api";
 
-export default function WorkersView({ token, workers, architecture, onUpdated }) {
-  async function handleRemove(employeeCode) {
-    await apiClient.del(`/api/v2/workers/${encodeURIComponent(employeeCode)}`, token);
-    await onUpdated();
-  }
+export default function WorkersView({ token, workers, onUpdated }) {
+  const [busyCode, setBusyCode] = useState("");
+  const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState("info");
 
-  async function handleRebuildIndex() {
-    await apiClient.post("/api/v2/index/rebuild", token);
-    await onUpdated();
+  async function handleRemove(worker) {
+    const confirmed = window.confirm(`Remove ${worker.name} (${worker.employee_code}) from the database?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyCode(worker.employee_code);
+    setMessage("");
+    setMessageTone("info");
+    try {
+      await apiClient.del(`/api/v2/workers/${encodeURIComponent(worker.employee_code)}`, token);
+      setMessage(`${worker.name} was removed from the database.`);
+      setMessageTone("success");
+      await onUpdated();
+    } catch (requestError) {
+      const text = requestError instanceof Error ? requestError.message : "Could not remove the employee.";
+      setMessage(text);
+      setMessageTone("error");
+    } finally {
+      setBusyCode("");
+    }
   }
 
   return (
-    <div className="dashboard-grid">
-      <Panel
-        eyebrow="Directory Controls"
-        title="Worker Register"
-        actions={<button className="button button-secondary" onClick={handleRebuildIndex}>Rebuild Index</button>}
-      >
-        <div className="stack-grid two-col">
-          <InfoPair label="Recognition Backend" value={architecture?.active_embedder || "-"} />
-          <InfoPair label="Search Backend" value={architecture?.active_index || "-"} />
-        </div>
-      </Panel>
+    <Panel eyebrow="Registered Users" title="Employee Database">
+      {message ? <div className={`alert ${messageTone}`}>{message}</div> : null}
 
-      <Panel eyebrow="Enrolled Personnel" title="Registered Workers" className="wide">
-        <DataTable
-          headers={["Employee Code", "Name", "Created", "Action"]}
-          rows={workers.map((worker) => [
-            worker.employee_code,
-            worker.name,
-            new Date(worker.created_at).toLocaleString(),
-            <button
-              className="button button-ghost button-small"
-              key={worker.employee_code}
-              onClick={() => handleRemove(worker.employee_code)}
-            >
-              Remove
-            </button>,
-          ])}
-          emptyLabel="No workers enrolled yet."
-        />
-      </Panel>
-    </div>
-  );
-}
-
-function InfoPair({ label, value }) {
-  return (
-    <div className="info-pair">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
+      <DataTable
+        headers={["Employee ID", "Name", "Action"]}
+        rows={workers.map((worker) => [
+          worker.employee_code,
+          worker.name,
+          <button
+            className="button button-danger button-small"
+            key={worker.employee_code}
+            onClick={() => handleRemove(worker)}
+            disabled={busyCode === worker.employee_code}
+          >
+            {busyCode === worker.employee_code ? "Removing..." : "Remove"}
+          </button>,
+        ])}
+        emptyLabel="No employees have been added yet."
+      />
+    </Panel>
   );
 }

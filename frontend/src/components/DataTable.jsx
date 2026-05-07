@@ -10,11 +10,15 @@ export default function DataTable({ headers, rows = [], emptyLabel = "No records
         <tbody>
           {rows.length ? rows.map((row, rowIndex) => (
             <tr key={rowIndex}>
-              {row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}
+              {row.map((cell, cellIndex) => (
+                <td key={cellIndex} data-label={headers[cellIndex]}>
+                  {cell}
+                </td>
+              ))}
             </tr>
           )) : (
             <tr>
-              <td colSpan={headers.length}>{emptyLabel}</td>
+              <td colSpan={headers.length} data-label="Status">{emptyLabel}</td>
             </tr>
           )}
         </tbody>

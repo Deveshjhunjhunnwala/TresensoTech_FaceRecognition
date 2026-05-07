@@ -1,15 +1,19 @@
-export default function Sidebar({ items, currentView, onChangeView, username, onLogout }) {
+export default function Sidebar({ items, currentView, onChangeView, username, onLogout, isOpen, onClose }) {
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpen ? "open" : ""}`}>
+      <div className="sidebar-mobile-head">
+        <div className="sidebar-section-label">Navigation</div>
+        <button className="sidebar-close" onClick={onClose} aria-label="Close navigation">Close</button>
+      </div>
       <div className="brand-block">
-        <div className="brand-mark">IA</div>
-        <div>
-          <h1>Industrial Attendance</h1>
-          <p>Operator-grade face recognition console</p>
+        <img className="brand-logo" src="/tresenso-logo.png" alt="Tresenso Tech logo" />
+        <div className="brand-meta">
+          <h1>Tresenso Face Attendance</h1>
+          <p>Tresenso Tech Private Limited</p>
         </div>
       </div>
 
-      <div className="sidebar-section-label">Workspace</div>
+      <div className="sidebar-section-label">Menu</div>
       <nav className="nav-list">
         {items.map((item) => (
           <button

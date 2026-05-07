@@ -26,11 +26,32 @@ function buildHeaders(token, headers = {}) {
 }
 
 export const apiClient = {
+  getAuthStatus() {
+    return request("/api/v2/auth/status");
+  },
   login(username, password) {
     return request("/api/v2/auth/login", {
       method: "POST",
       headers: buildHeaders("", { "Content-Type": "application/json" }),
       body: JSON.stringify({ username, password }),
+    });
+  },
+  setupCredentials(username, password, confirmPassword) {
+    return request("/api/v2/auth/setup", {
+      method: "POST",
+      headers: buildHeaders("", { "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        username,
+        password,
+        confirm_password: confirmPassword,
+      }),
+    });
+  },
+  resetCredentials(payload) {
+    return request("/api/v2/auth/reset", {
+      method: "POST",
+      headers: buildHeaders("", { "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
     });
   },
   me(token) {

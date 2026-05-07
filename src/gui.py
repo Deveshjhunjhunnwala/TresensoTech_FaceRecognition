@@ -3,7 +3,14 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
-from src.auth import authenticate_admin, get_admin_credentials
+from src.auth import (
+    authenticate_admin,
+    ensure_admin_auth_config,
+    get_admin_username,
+    get_auth_status,
+    reset_admin_credentials,
+    setup_admin_credentials,
+)
 from src.db import init_database, list_attendance, list_people
 from src.enrollment import enroll_person
 from src.exporter import export_attendance_to_excel, export_today
@@ -17,6 +24,7 @@ class AttendanceApp:
     def __init__(self) -> None:
         ensure_directories()
         init_database()
+        ensure_admin_auth_config(allow_bootstrap=True)
         self.root = tk.Tk()
         self.root.title("Facial Recognition Attendance System")
         self.root.geometry("960x640")
@@ -44,9 +52,13 @@ class AttendanceApp:
         username_entry.grid(row=1, column=1, pady=6)
         password_entry.grid(row=2, column=1, pady=6)
 
-        default_user, default_password = get_admin_credentials()
-        hint = f"Default credentials: {default_user} / {default_password}"
-        ttk.Label(frame, text=hint).grid(row=3, column=0, columnspan=2, pady=(4, 16))
+        configured_user = get_admin_username() or ""
+        auth_status = get_auth_status()
+        if configured_user:
+            username_entry.insert(0, configured_user)
+            ttk.Label(frame, text=f"Configured admin user: {configured_user}").grid(row=3, column=0, columnspan=2, pady=(4, 16))
+        else:
+            ttk.Label(frame, text="No admin credentials yet. Create them before login.").grid(row=3, column=0, columnspan=2, pady=(4, 16))
 
         def submit_login() -> None:
             username = username_entry.get().strip()
@@ -57,7 +69,59 @@ class AttendanceApp:
                 messagebox.showerror("Login Failed", "Invalid admin credentials.")
 
         ttk.Button(frame, text="Login", command=submit_login).grid(row=4, column=0, columnspan=2, pady=10)
+        ttk.Button(frame, text="Create Credentials", command=self._setup_credentials).grid(row=5, column=0, pady=6, sticky="ew")
+        if auth_status.configured:
+            ttk.Button(frame, text="Reset Credentials", command=self._reset_credentials).grid(row=5, column=1, pady=6, sticky="ew")
         self.root.bind("<Return>", lambda _event: submit_login())
+
+    def _setup_credentials(self) -> None:
+        if get_auth_status().configured:
+            messagebox.showinfo("Credentials Exist", "Credentials are already configured. Use reset instead.")
+            return
+
+        username = simpledialog.askstring("Create Credentials", "Choose username:", parent=self.root)
+        if not username:
+            return
+        password = simpledialog.askstring("Create Credentials", "Choose password:", parent=self.root, show="*")
+        if not password:
+            return
+        confirm = simpledialog.askstring("Create Credentials", "Confirm password:", parent=self.root, show="*")
+        if confirm != password:
+            messagebox.showerror("Setup Failed", "Passwords do not match.")
+            return
+        try:
+            setup_admin_credentials(username=username, password=password)
+        except (RuntimeError, ValueError) as exc:
+            messagebox.showerror("Setup Failed", str(exc))
+            return
+        messagebox.showinfo("Success", "Credentials created successfully.")
+        self._build_login()
+
+    def _reset_credentials(self) -> None:
+        current_username = simpledialog.askstring("Reset Credentials", "Current username:", parent=self.root)
+        if not current_username:
+            return
+        new_username = simpledialog.askstring("Reset Credentials", "New username:", parent=self.root)
+        if not new_username:
+            return
+        new_password = simpledialog.askstring("Reset Credentials", "New password:", parent=self.root, show="*")
+        if not new_password:
+            return
+        confirm = simpledialog.askstring("Reset Credentials", "Confirm new password:", parent=self.root, show="*")
+        if confirm != new_password:
+            messagebox.showerror("Reset Failed", "Passwords do not match.")
+            return
+        try:
+            reset_admin_credentials(
+                current_username=current_username,
+                new_username=new_username,
+                new_password=new_password,
+            )
+        except (RuntimeError, ValueError) as exc:
+            messagebox.showerror("Reset Failed", str(exc))
+            return
+        messagebox.showinfo("Success", "Credentials reset successfully.")
+        self._build_login()
 
     def _build_dashboard(self) -> None:
         self._clear_root()
