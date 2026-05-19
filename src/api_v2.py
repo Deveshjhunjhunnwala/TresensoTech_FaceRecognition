@@ -34,8 +34,8 @@ from src.v2.service import ScalableAttendanceService
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
-FRONTEND_INDEX = FRONTEND_DIST_DIR / "index.html"
+##FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
+##FRONTEND_INDEX = FRONTEND_DIST_DIR / "index.html"
 
 
 class LoginRequest(BaseModel):
@@ -121,21 +121,19 @@ def verify_session_backend() -> None:
     session_store.ping()
 
 
-@app.get("/", response_class=HTMLResponse, response_model=None)
-def root() -> Response:
-    if FRONTEND_INDEX.exists():
-        return FileResponse(FRONTEND_INDEX)
-    return HTMLResponse(
-        """
-        <html>
-            <head><title>Facial Attendance App</title></head>
-            <body style="font-family:Segoe UI,Arial,sans-serif;padding:40px;background:#f5f7fa;">
-                <h1>Frontend Not Built Yet</h1>
-                <p>Run <code>npm install</code> and <code>npm run build</code> inside the <code>frontend</code> folder.</p>
-            </body>
-        </html>
-        """
-    )
+##@app.get("/", response_class=HTMLResponse, response_model=None)
+##  return FileResponse(FRONTEND_INDEX)
+    ##return HTMLResponse(
+       ## """
+       ## <html>
+          ##  <head><title>Facial Attendance App</title></head>
+          ##  <body style="font-family:Segoe UI,Arial,sans-serif;padding:40px;background:#f5f7fa;">
+           ##     <h1>Frontend Not Built Yet</h1>
+            ##    <p>Run <code>npm install</code> and <code>npm run build</code> inside the <code>frontend</code> folder.</p>
+          ##  </body>
+       ## </html>
+      ##  """
+   ## )
 
 
 @app.get("/health")
