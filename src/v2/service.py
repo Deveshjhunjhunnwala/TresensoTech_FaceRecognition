@@ -405,7 +405,18 @@ class ScalableAttendanceService:
                 continue
             attendance_marked = False
             if source != "cache":
-                attendance_marked = repository.mark_attendance(worker_id=worker_id, camera_id=camera_id, matched_score=score)
+                attendance_marked = repository.mark_attendance(
+                    worker_id=worker_id,
+                    camera_id=camera_id,
+                    matched_score=score,
+                    intoxication_data={
+                    "alcohol": "0.02 mg/L",
+                    "cannabis": "12 ppm",
+                    "terpeneConfidence": "91%",
+                    "warning": True,
+                    },
+                    )
+                
                 self.recognition_cache.remember(camera_id=camera_id, worker_id=worker_id, score=score)
             matches.append(
                 MatchResult(
@@ -431,7 +442,6 @@ class ScalableAttendanceService:
         faces = detect_faces(image)
         if not faces:
             return RecognitionResult(matches=[], unknown_faces=0, detected_faces=0, boxes=[], debug_faces=[])
-
         if self.lbph_recognizer is None:
             self._rebuild_lbph_model()
         if self.lbph_recognizer is None:

@@ -17,6 +17,11 @@ export default function RecognitionView({ token, onUpdated }) {
   const streamRef = useRef(null);
   const timerRef = useRef(null);
   const requestInFlightRef = useRef(false);
+  // Added by Devesh: State for breath testing
+  const [breathTesting, setBreathTesting] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [testResult, setTestResult] = useState(null);
+  const [lockedMatch, setLockedMatch] = useState(null);
 
   useEffect(() => () => stopLive(timerRef, streamRef, videoRef), []);
 
@@ -52,8 +57,11 @@ export default function RecognitionView({ token, onUpdated }) {
 
           const result = await apiClient.post("/api/v2/recognitions", token, form);
           setMatches(result.matches || []);
+          // added by Devesh: Lock the first match to prevent flickering between matches if multiple faces are detected
+          if (result.matches?.length > 0 && !lockedMatch) {
+            setLockedMatch(result.matches[0]);
+          }
           drawBoxes(overlayRef.current, videoRef.current, result.boxes || []);
-
           if (result.matches?.length) {
             const firstMatch = result.matches[0];
             setLastUnknown(false);
@@ -105,18 +113,77 @@ export default function RecognitionView({ token, onUpdated }) {
     setRunning(false);
     setMessage("Scan stopped.");
   }
+  // Added by Devesh: Function to handle blow test
+  const handleBlowTest = () => {
+  setBreathTesting(true);
+  setCountdown(10);
+  setTestResult(null);
 
+  let timer = 10;
+
+  const interval = setInterval(() => {
+    timer -= 1;
+    setCountdown(timer);
+
+    if (timer <= 0) {
+      clearInterval(interval);
+
+      setBreathTesting(false);
+
+      setTestResult({
+        alcohol: "0.02 mg/L",
+        cannabis: "12 ppm",
+        terpeneConfidence: "91%",
+        warning: true,
+      });
+    }
+  }, 1000);
+};
+  
+        // added by devesh changed matches.length ? to lockedMatch 
+        // chnegd matches.map to lockedMatch.map
+        //added by Devesh chnged matches.length to matches.length || lockedMatch.length in empty state condition
   return (
     <div className="device-stack">
       <Panel
         eyebrow="Live Camera"
         title="Scan Face"
-        actions={(
+        actions={
+        <>
           <div className="button-row">
-            <button className="button button-secondary" onClick={handleStart} disabled={running}>Start</button>
-            <button className="button button-ghost" onClick={handleStop} type="button">Stop</button>
-          </div>
+            <button
+            className="button button-secondary"
+            onClick={handleStart}
+            disabled={running}
+            >
+              Start
+            </button>
+            
+            <button
+            className="button button-ghost"
+            onClick={handleStop}
+            type="button"
+            >
+              Stop
+            </button>
+            </div>
+            
+            {(matches.length > 0 || lockedMatch) && (
+              <>
+              <div className="section-label">Breath Analysis</div>
+
+              <button
+              className="button button-primary"
+              onClick={handleBlowTest}
+              disabled={breathTesting}
+              type="button"
+              >
+                {breathTesting ? `Blowing... ${countdown}s` : "Blow"}
+              </button>
+              </>
         )}
+        </>
+        }
       >
         <div className="alert info">{message}</div>
         <div className="video-frame">
@@ -127,9 +194,24 @@ export default function RecognitionView({ token, onUpdated }) {
       </Panel>
 
       <Panel eyebrow="Result" title="Scan Status">
-        {matches.length ? (
+        {testResult && (
+          <div className="result-card result-card-danger">
+            
+            <strong>Breath Test Result</strong>
+            <div>Alcohol: {testResult.alcohol}</div>
+            <div>Cannabis: {testResult.cannabis}</div>
+            <div>Terpene Confidence: {testResult.terpeneConfidence}</div>
+            {testResult.warning && (
+              <p>
+                High concentration of terpenes present; indicative of cannabis
+                intoxication — confirmatory tests recommended.
+              </p>
+            )}
+          </div>
+        )}
+        {lockedMatch  ? (
           <div className="result-grid">
-            {matches.map((match) => (
+            {[lockedMatch].map((match) => (
               <div className="result-card result-card-success" key={`${match.worker_id}-${match.source}`}>
                 <strong>{match.name}</strong>
                 <div className="mono">Employee ID: {match.employee_code}</div>

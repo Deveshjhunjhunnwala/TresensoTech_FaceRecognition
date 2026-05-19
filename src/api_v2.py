@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware #Added By Devesh
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -78,6 +79,23 @@ app = FastAPI(
     version="3.0.0",
     description="FastAPI backend for the operator-facing React attendance application.",
 )
+
+# Allow CORS for all origins (you may want to restrict this in production) Added By Devesh
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+app.mount(
+    "/assets",
+    StaticFiles(directory=frontend_dist / "assets"),
+    name="assets",
+)
+
 service = ScalableAttendanceService()
 session_store = get_session_store()
 
@@ -254,6 +272,12 @@ async def recognize(
     image_bytes = await image.read()
     return service.recognize(image_bytes=image_bytes, camera_id=camera_id, top_k=top_k)
 
+@app.post("/api/v2/intoxication")
+async def save_intoxication(
+    payload: dict,
+    _: SessionState = Depends(require_auth),
+):
+    return service.save_intoxication(payload)
 
 @app.post("/api/v2/detections", response_model=DetectionResult)
 async def detect(image: UploadFile = File(...), _: SessionState = Depends(require_auth)) -> DetectionResult:

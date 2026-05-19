@@ -44,6 +44,12 @@ def init_database() -> None:
                 status TEXT NOT NULL,
                 confidence REAL,
                 source TEXT NOT NULL,
+
+                alcohol_level TEXT,
+                cannabis_level TEXT,
+                terpene_confidence TEXT,
+                intoxication_status TEXT,
+
                 created_at TEXT NOT NULL,
                 UNIQUE(person_id, attendance_date),
                 FOREIGN KEY (person_id) REFERENCES people(id)

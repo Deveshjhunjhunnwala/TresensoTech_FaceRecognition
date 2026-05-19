@@ -429,6 +429,26 @@ input:focus {
   border-color: rgba(164, 91, 11, 0.25);
   background: linear-gradient(180deg, rgba(255, 247, 235, 0.96), rgba(255, 255, 255, 0.98));
 }
+/* added by Devesh: result-card-danger class for failed breath tests */
+.section-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #b45309;
+  margin-top: 1rem;
+  margin-bottom: 0.45rem;
+}
+
+.result-card-danger {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: linear-gradient(
+    180deg,
+    rgba(254, 242, 242, 0.96),
+    rgba(255, 255, 255, 0.98)
+  );
+  color: #991b1b;
+}
 
 .pill {
   width: fit-content;

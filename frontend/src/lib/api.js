@@ -5,9 +5,9 @@ export class ApiError extends Error {
     this.status = status;
   }
 }
-
+const API_BASE = import.meta.env.VITE_API_BASE || ""; // Adjust this if your backend is running on a different host or port Added By Devesh
 async function request(path, options = {}) {
-  const response = await fetch(path, options);
+  const response = await fetch(`${API_BASE}${path}`, options); // Adjusted to use API_BASE added by Devesh
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new ApiError(payload.detail || "Request failed.", response.status);

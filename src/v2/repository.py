@@ -60,6 +60,12 @@ def init_schema() -> None:
                 worker_id INTEGER NOT NULL,
                 camera_id TEXT NOT NULL,
                 matched_score REAL NOT NULL,
+
+                alcohol_level TEXT,
+                cannabis_level TEXT,
+                terpene_confidence TEXT,
+                intoxication_status TEXT,
+
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (worker_id) REFERENCES workers(id)
             )
@@ -235,10 +241,18 @@ def embedding_count(backend: str | None = None, dimension: int | None = None) ->
         return 0 if row is None else int(row["count"])
 
 
-def mark_attendance(worker_id: int, camera_id: str, matched_score: float) -> bool:
+def mark_attendance(
+        worker_id: int,
+        camera_id: str,
+        matched_score: float,
+        intoxication_data=None,
+        ) -> bool:
+    
     now = datetime.now(timezone.utc)
     cutoff = (now - timedelta(hours=ATTENDANCE_COOLDOWN_HOURS)).isoformat(timespec="seconds")
     created_at = now.isoformat(timespec="seconds")
+    if intoxication_data is None:
+        intoxication_data = {}
 
     with get_connection() as connection:
         # Serialize the "check recent event -> insert new event" flow so
@@ -257,9 +271,31 @@ def mark_attendance(worker_id: int, camera_id: str, matched_score: float) -> boo
             return False
 
         connection.execute(
-            "INSERT INTO attendance_events (worker_id, camera_id, matched_score, created_at) VALUES (?, ?, ?, ?)",
-            (worker_id, camera_id, matched_score, created_at),
-        )
+            """
+            INSERT INTO attendance_events (
+            worker_id,
+            camera_id,
+            matched_score,
+            alcohol_level,
+            cannabis_level,
+            terpene_confidence,
+            intoxication_status,
+            created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                worker_id,
+                camera_id,
+                matched_score,
+                intoxication_data.get("alcohol", ""),
+                intoxication_data.get("cannabis", ""),
+                intoxication_data.get("terpeneConfidence", ""),
+                "Positive" if intoxication_data.get("warning") else "Clear",
+                created_at,
+                ),
+        
+        )       
         return True
 
 
@@ -267,8 +303,15 @@ def list_attendance(limit: int = 100) -> list[sqlite3.Row]:
     with get_connection() as connection:
         return connection.execute(
             """
-            SELECT attendance_events.id, attendance_events.worker_id, workers.employee_code, workers.name,
-                   attendance_events.camera_id, attendance_events.matched_score, attendance_events.created_at
+            SELECT attendance_events.id,attendance_events.worker_id,workers.employee_code,workers.name,
+            attendance_events.camera_id,
+            attendance_events.matched_score,
+            attendance_events.alcohol_level,
+            attendance_events.cannabis_level,
+            attendance_events.terpene_confidence,
+            attendance_events.intoxication_status,
+            attendance_events.created_at
+
             FROM attendance_events
             JOIN workers ON workers.id = attendance_events.worker_id
             ORDER BY attendance_events.created_at DESC
