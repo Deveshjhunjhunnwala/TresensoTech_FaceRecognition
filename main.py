@@ -1,7 +1,1 @@
-from fastapi import FastAPI
-
-app = FastAPI()
-
-@app.get("/")
-def root():
-    return {"message": "working"}
+from src.api_v2 import app
