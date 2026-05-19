@@ -6,7 +6,7 @@ export default function Sidebar({ items, currentView, onChangeView, username, on
         <button className="sidebar-close" onClick={onClose} aria-label="Close navigation">Close</button>
       </div>
       <div className="brand-block">
-        <img className="brand-logo" src="/tresenso-logo.png" alt="Tresenso Tech logo" />
+        <img className="brand-logo" src="https://i.postimg.cc/25NqkrQb/tresenso-logo.png"alt="Tresenso Tech logo" />
         <div className="brand-meta">
           <h1>Tresenso Face Attendance</h1>
           <p>Tresenso Tech Private Limited</p>

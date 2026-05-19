@@ -64,7 +64,7 @@ export default function LoginView({ authStatus, onLogin, onSetup, onReset, error
   return (
     <div className="login-layout">
       <section className="login-brand-card">
-        <img className="login-logo" src="/tresenso-logo.png" alt="Tresenso Tech logo" />
+        <img className="login-logo" src="https://i.postimg.cc/25NqkrQb/tresenso-logo.png" alt="Tresenso Tech logo" />
         <div className="login-badge">Tresenso Tech Pvt Ltd</div>
         <h2>Face Attendance Device</h2>
         <p>Portrait-ready operator console for quick enrollment, scanning, database lookup, and attendance history.</p>
