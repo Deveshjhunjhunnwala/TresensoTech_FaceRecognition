@@ -27,4 +27,4 @@ COPY . .
 
 COPY --from=frontend-builder /frontend/dist ./frontend/dist
 
-CMD uvicorn src.api_v2:app --host 0.0.0.0 --port $PORT
+CMD ["sh", "-c", "uvicorn src.api_v2:app --host 0.0.0.0 --port ${PORT:-8000}"]
