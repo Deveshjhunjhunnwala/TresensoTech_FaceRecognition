@@ -4,5 +4,5 @@ openpyxl==3.1.5
 fastapi==0.115.12
 uvicorn==0.34.0
 python-multipart==0.0.20
-mediapipe==0.10.14
+mediapipe==0.10.20
 bcrypt==4.2.1
