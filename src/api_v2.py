@@ -6,7 +6,6 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware #Added By Devesh
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.auth import (
@@ -79,6 +78,9 @@ app = FastAPI(
     version="3.0.0",
     description="FastAPI backend for the operator-facing React attendance application.",
 )
+@app.get("/")
+def root():
+    return {"status": "backend working"}
 
 # Allow CORS for all origins (you may want to restrict this in production) Added By Devesh
 app.add_middleware(
@@ -89,20 +91,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-app.mount(
-    "/assets",
-    StaticFiles(directory=frontend_dist / "assets"),
-    name="assets",
-)
-
 service = ScalableAttendanceService()
 session_store = get_session_store()
-
-
-if (FRONTEND_DIST_DIR / "assets").exists():
-    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST_DIR / "assets"), name="assets")
-
 
 def _extract_token(authorization: str | None, x_auth_token: str | None) -> str | None:
     if authorization and authorization.lower().startswith("bearer "):
