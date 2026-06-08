@@ -3,11 +3,17 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+import gi
+gi.require_version('Gst', '1.0')
+
+from gi.repository import Gst
+import numpy as np
 
 import cv2
 
 from src.config import CAMERA_INDEX
 
+Gst.init(None)
 
 def _int_env(name: str, default: int) -> int:
     value = os.getenv(name)
@@ -174,15 +180,101 @@ def _open_candidate(candidate: _CameraCandidate) -> CameraStream | None:
         pending_frame=frame,
     )
 
+class RadxaGstCamera:
+
+    def __init__(self):
+
+        pipeline_str = (
+            "v4l2src device=/dev/video0 "
+            "en-awisp=1 en-largemode=0 ! "
+            "video/x-raw,format=I420,width=1920,height=1080,framerate=60/1 ! "
+            "appsink name=sink emit-signals=true max-buffers=1 drop=true"
+        )
+
+        self.pipeline = Gst.parse_launch(pipeline_str)
+
+        self.sink = self.pipeline.get_by_name("sink")
+
+        self.pipeline.set_state(Gst.State.PLAYING)
+
+        self.source_name = "Radxa GST Camera"
+
+    def read(self):
+
+        sample = self.sink.emit(
+            "try-pull-sample",
+            Gst.SECOND
+        )
+
+        if sample is None:
+            return False, None
+
+        buffer = sample.get_buffer()
+
+        success, mapinfo = buffer.map(
+            Gst.MapFlags.READ
+        )
+
+        if not success:
+            return False, None
+
+        try:
+
+            data = np.frombuffer(
+                mapinfo.data,
+                dtype=np.uint8
+            )
+
+            frame = data.reshape(
+                (1080 * 3 // 2, 1920)
+            )
+
+            frame = cv2.cvtColor(
+                frame,
+                cv2.COLOR_YUV2BGR_I420
+            )
+
+            frame = cv2.rotate(
+                frame,
+                cv2.ROTATE_180
+            )
+
+            frame = cv2.flip(
+                frame,
+                1
+            )
+
+            return True, frame
+
+        finally:
+
+            buffer.unmap(mapinfo)
+
+    def release(self):
+
+        self.pipeline.set_state(
+            Gst.State.NULL
+        )
+
 
 def open_camera() -> CameraStream:
+
+    try:
+        return RadxaGstCamera()
+    except Exception as exc:
+        print("Radxa GST failed:", exc)
+
     attempted_sources: list[str] = []
 
     for candidate in _camera_candidates():
         attempted_sources.append(candidate.source_name)
+
         camera = _open_candidate(candidate)
+
         if camera is not None:
             return camera
+
+    ...
 
     attempted = ", ".join(attempted_sources)
     raise RuntimeError(
